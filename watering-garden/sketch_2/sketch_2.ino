@@ -4,7 +4,7 @@
 
 bool isResetApp = false;        // Important: Must be "false" at production time.
 
-const String runEveryDayAt = "22:06"; // HH:MM
+const String runEveryDayAt = "22:00"; // HH:MM
 const long intervalTime = (long) 1 * 60 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
 const long motorRunningTime = (long) 10 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
 const float lastRanThresholdPercent = 60.0; // Percent to Re-run check after arduino restart.
@@ -83,10 +83,10 @@ String split(String str, char delimiter, unsigned int pos)
 // Time
 TimeSpan millisToTimeSpan(long ms)
 {
-  int d = ms/ (24 * 60 * 60 * 1000);
-  int h = ms/ (60 * 60 * 1000);       h %= 24;
-  int m = ms/ (60 * 1000);            m %= 60;
-  int s = ms/ (1000);                 s %= 60;
+  int d = ms/ 86400000;
+  int h = ms/ 3600000;  h %= 24;
+  int m = ms/ 60000;    m %= 60;
+  int s = ms/ 1000;     s %= 60;
   return TimeSpan(d, h, m, s);
 }
 
@@ -352,11 +352,11 @@ void loop() {
       } 
     } else {
       Serial.println("Wait for a minute...");
-      delay(57 * 1000); 
+      delay((long) 57 * 1000); 
     }
   } else {
     Serial.println("Wait for an hour...");
-    delay(57 * 60 * 1000); 
+    delay((long) 57 * 60 * 1000); 
   }
 
   // Default timeout.

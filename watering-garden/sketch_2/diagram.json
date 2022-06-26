@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "author": "Jai K",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-arduino-uno", "id": "uno", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-ds1307", "id": "rtc1", "top": 234.5, "left": 322.4, "attrs": {} },
+    { "type": "wokwi-servo", "id": "servo1", "top": -138.63, "left": 362.23, "attrs": {} },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": -132.23,
+      "left": -190.55,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": -140.71,
+      "left": -145.67,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": -60.67,
+      "left": -74.17,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": -89.48,
+      "left": -75.24,
+      "attrs": { "value": "220" }
+    }
+  ],
+  "connections": [
+    [ "rtc1:SDA", "rtc1:SQW", "green", [ "h0" ] ],
+    [ "rtc1:SCL", "uno:A5", "magenta", [ "h0" ] ],
+    [ "rtc1:SDA", "uno:A4", "orange", [ "h0" ] ],
+    [ "rtc1:5V", "uno:5V", "red", [ "h0" ] ],
+    [ "rtc1:GND", "uno:GND.2", "black", [ "h0" ] ],
+    [ "servo1:GND", "uno:GND.1", "black", [ "h0" ] ],
+    [ "servo1:V+", "uno:5V", "red", [ "h-61.22", "v380.41", "h-141.93" ] ],
+    [ "servo1:PWM", "uno:8", "green", [ "h0" ] ],
+    [ "led2:A", "r2:1", "gold", [ "v0" ] ],
+    [ "led1:C", "uno:GND.1", "black", [ "v82.03", "h287.74" ] ],
+    [ "led2:C", "uno:GND.1", "black", [ "v80.91", "h240.73" ] ],
+    [ "led1:A", "r1:1", "gold", [ "v0" ] ],
+    [ "r2:2", "uno:6", "gold", [ "v1.85", "h224.41" ] ],
+    [ "r1:2", "uno:7", "gold", [ "v-1.35", "h197.72" ] ]
+  ]
+}
