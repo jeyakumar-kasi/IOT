@@ -4,7 +4,7 @@
 
 bool isResetApp = false;        // Important: Must be "false" at production time.
 
-const String runEveryDayAt = "22:00"; // HH:MM
+const String runEveryDayAt = "23:30"; // HH:MM
 const long intervalTime = (long) 1 * 60 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
 const long motorRunningTime = (long) 10 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
 const float lastRanThresholdPercent = 60.0; // Percent to Re-run check after arduino restart.
@@ -24,7 +24,7 @@ char daysOfTheWeek[7][12] = {
 };
 
 const int redLedPin = 7;
-const int greenLedPin = 6; 
+const int blueLedPin = 6; 
 const int motorCtrlPin = 8;
 
 
@@ -123,7 +123,7 @@ String read(int pos=0)
 void syncDateTime() 
 {
   Serial.print("Sync. the time... ["); 
-  //!rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 
   // OR
   //rtc.adjust(DateTime(2022, 6, 16, 22, 22, 0));
@@ -284,16 +284,14 @@ void runMotor()
 
   //@servo1.write(90);
   digitalWrite(motorCtrlPin, LOW);
-  digitalWrite(redLedPin, LOW);
-  digitalWrite(greenLedPin, HIGH);
+  digitalWrite(blueLedPin, HIGH);
 
   // Wait for the motor completes its running state.
   await_motorRunningTime();
 
   //@servo1.write(0);
   digitalWrite(motorCtrlPin, HIGH);
-  digitalWrite(greenLedPin, LOW);
-  digitalWrite(redLedPin, HIGH);
+  digitalWrite(blueLedPin, LOW);
 
   Serial.println("Motor - OFF");
   now = getRTCNow();
@@ -303,18 +301,51 @@ void runMotor()
   nextRunAtDateTime = getNextRunDateTime();
 }
 
+void checkRTCStatus()
+{
+  bool isSetupOk = false;
+  bool isAlerted = false;
+  while (! isSetupOk) {
+    if (! rtc.begin()) {
+      if (! isAlerted) {
+        isAlerted = true;
+        Serial.println("RTC is not starting...");
+      }
+    } else if (! rtc.isrunning()) {
+      if (! isAlerted) {
+        isAlerted = true;
+        Serial.println("RTC is not running...");
+      }
+    } else if ((int) rtc.now().year() < 2022 ) {
+      if (! isAlerted) {
+        isAlerted = true;
+        Serial.println("RTC is not sending a valid date.");
+      }
+    } else {
+      isSetupOk = true;
+      Serial.println("RTC is OK.");
+    }
+
+    if (isSetupOk) {
+      // No Errors.
+      digitalWrite(redLedPin, LOW);      
+    } else {
+      // Blink danger light
+      digitalWrite(redLedPin, HIGH);
+    }
+
+    // Check again after 100 ms.
+    delay(100);
+  }
+  isAlerted = false;
+}
+
 void setup() {
   Serial.begin(9600);
   while (!Serial);
 
   // RTC
-  if (! rtc.begin()) {
-    Serial.println("RTC is not starting...");
-    while (1);
-  } else if (! rtc.isrunning()) {
-    Serial.println("RTC is not running...");
-    while (1);
-  }
+  checkRTCStatus();
 
   if (isResetApp) {
     resetEEPROM();
@@ -327,32 +358,37 @@ void setup() {
 
   // Set initial RTC time
   setInitialRTCDateTime();
-
   printDateTime(getRTCNow()); Serial.println(" | Welcome!");
 
   // Update "Next Run" date & time
   nextRunAtDateTime = getNextRunDateTime();
 
   pinMode(redLedPin, OUTPUT);
-  pinMode(greenLedPin, OUTPUT);
+  pinMode(blueLedPin, OUTPUT);
   pinMode(motorCtrlPin, OUTPUT);
   //@servo1.attach(motorCtrlPin);
+
+  //~ Test Run
+  //runMotor();
 }
 
 void loop() {
-  printDateTime(nextRunAtDateTime); Serial.println(" | Next Run Time..");
+  //~checkRTCStatus();
+  //printDateTime(nextRunAtDateTime); Serial.println(" | Next Run Time..");
 
   if ((int) getRTCNow().day() == (int) nextRunAtDateTime.day()) {
     // Day
-    if ((int) getRTCNow().hour() == (int) nextRunAtDateTime.hour()) {
+    //!if ((int) getRTCNow().hour() == (int) nextRunAtDateTime.hour()) {
+    if ((int) getRTCNow().hour() % 2 != 0) {
       // Hour
       if ((int) getRTCNow().minute() == (int) nextRunAtDateTime.minute()) { 
         // Minute
+        Serial.println("Start to run the Motor...");
         runMotor();
       } 
     } else {
       Serial.println("Wait for a minute...");
-      delay((long) 57 * 1000); 
+      delay((long) 57 * 1000);
     }
   } else {
     Serial.println("Wait for an hour...");
