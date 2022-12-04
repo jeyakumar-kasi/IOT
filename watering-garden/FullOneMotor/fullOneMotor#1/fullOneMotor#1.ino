@@ -226,7 +226,7 @@ DateTime getNextRunDateTime()
   if (lastRanStateStr && lastRanStateStr != "") {
     float lastRanStateLevel = split(lastRanStateStr, '_', 1).toFloat(); // 0.0 -> 50.0 -> 100.0
 
-    if (lastRanStateLevel <= (float) lastRanThresholdPercent) {
+    if (lastRanStateLevel < (float) lastRanThresholdPercent) {
       Serial.print(lastRanStateLevel); Serial.println(" | Partially Ran, Run it again on next immedidate possible date.");
       return nextPossibleDay();
     } else {
