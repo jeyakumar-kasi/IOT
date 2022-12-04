@@ -5,8 +5,11 @@
 bool isResetApp = false;        // Important: Must be "false" at production time.
 
 const String runEveryDayAt = "23:00"; // HH:MM
-const long intervalTime = (long) 60 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
-const long motorRunningTime = (long) 10 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
+//! const long intervalTime = (long) 60 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
+//! const long motorRunningTime = (long) 10 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
+const long intervalTime = (long) 5 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
+const long motorRunningTime = (long)  60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
+
 const float lastRanThresholdPercent = 60.0; // Percent to Re-run check after arduino restart.
 // --------------------------------------------------------
 
@@ -210,7 +213,8 @@ DateTime nextPossibleDay()
   //!   return strToDateTime(dateToStr(tomorrowDateTime) + "_" + runEveryDayAt);
   //! }
 
-  return strToDateTime(dateToStr(getRTCNow()) + "_" + ((String) getRTCNow().hour()) +":00") + TimeSpan(0, 1, 0, 0); // After 1 Hour
+  // return strToDateTime(dateToStr(getRTCNow()) + "_" + ((String) getRTCNow().hour()) +":00") + TimeSpan(0, 1, 0, 0); // After 1 Hour
+  return getRTCNow() + TimeSpan(0, 0, 5, 0); // After 5 mins
 }
 
 
@@ -220,7 +224,7 @@ DateTime getNextRunDateTime()
   String lastRanStateStr = (String) read(0); //"59.1_2022-06-28_12:0:10"; 
 
   if (lastRanStateStr && lastRanStateStr != "") {
-    float lastRanStateLevel = split(lastRanStateStr, '_', 1).toFloat(); // 0 -> 0.5 -> 1
+    float lastRanStateLevel = split(lastRanStateStr, '_', 1).toFloat(); // 0.0 -> 50.0 -> 100.0
 
     if (lastRanStateLevel <= (float) lastRanThresholdPercent) {
       Serial.print(lastRanStateLevel); Serial.println(" | Partially Ran, Run it again on next immedidate possible date.");
@@ -286,22 +290,22 @@ void runMotor()
 {
   Serial.println("Motor - ON");
   DateTime now = getRTCNow();
-  write("0_" + dateTimeToStr(now), 0);
+  write("0.0_" + dateTimeToStr(now), 0);
 
   //@servo1.write(90);
-  digitalWrite(motorCtrlPin, LOW);
+  digitalWrite(motorCtrlPin, LOW); // ON
   digitalWrite(blueLedPin, HIGH);
 
   // Wait for the motor completes its running state.
   await_motorRunningTime();
 
   //@servo1.write(0);
-  digitalWrite(motorCtrlPin, HIGH);
+  digitalWrite(motorCtrlPin, HIGH); // OFF
   digitalWrite(blueLedPin, LOW);
 
   Serial.println("Motor - OFF");
   now = getRTCNow();
-  write("1_" + dateTimeToStr(now), 0);
+  write("100.0_" + dateTimeToStr(now), 0);
 
   // Update "Next Run" date & time
   nextRunAtDateTime = getNextRunDateTime();
@@ -349,6 +353,7 @@ void setup() {
   pinMode(redLedPin, OUTPUT);
   pinMode(blueLedPin, OUTPUT);
   pinMode(motorCtrlPin, OUTPUT);
+  digitalWrite(motorCtrlPin, HIGH); // OFF
   //@servo1.attach(motorCtrlPin);
 
   Serial.begin(9600);
@@ -407,5 +412,5 @@ void loop() {
 
   // Default timeout.
   // delay(27 * 1000); // Wait for at least 30 secs.
-  delay(5 * 1000);
+  delay(30 * 1000);
 }
