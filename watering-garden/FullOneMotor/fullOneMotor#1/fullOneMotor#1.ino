@@ -4,13 +4,11 @@
 
 bool isResetApp = false;        // Important: Must be "false" at production time.
 
-const String runEveryDayAt = "23:00"; // HH:MM
-//! const long intervalTime = (long) 60 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
-//! const long motorRunningTime = (long) 10 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
-const long intervalTime = (long) 5 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
-const long motorRunningTime = (long)  60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
+const String runEveryDayAt = "22:00"; // HH:MM
+const long intervalTime = (long) 1 * 24 * 60 * 60 * 1000; // in millis (2 days)
+const long motorRunningTime = (long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
 
-const float lastRanThresholdPercent = 60.0; // Percent to Re-run check after arduino restart.
+const float lastRanThresholdPercent = 65.0; // Percent to Re-run check after arduino restart.
 // --------------------------------------------------------
 
 const int redLedPin = 7;
@@ -204,17 +202,16 @@ bool isTodayRunPossible()
 
 DateTime nextPossibleDay()
 {
-  //! if (isTodayRunPossible()) {
-  //!   // Run on today.
-  //!   return strToDateTime(dateToStr(getRTCNow()) + "_" + runEveryDayAt);
-  //! } else {
-  //!   // Take it on tomorrow.
-  //!   DateTime tomorrowDateTime = getRTCNow() + TimeSpan(1, 0, 0, 0);
-  //!   return strToDateTime(dateToStr(tomorrowDateTime) + "_" + runEveryDayAt);
-  //! }
-
+  if (isTodayRunPossible()) {
+    // Run on today.
+    return strToDateTime(dateToStr(getRTCNow()) + "_" + runEveryDayAt);
+  } else {
+    // Take it on tomorrow.
+    DateTime tomorrowDateTime = getRTCNow() + TimeSpan(1, 0, 0, 0);
+    return strToDateTime(dateToStr(tomorrowDateTime) + "_" + runEveryDayAt);
+  }
   // return strToDateTime(dateToStr(getRTCNow()) + "_" + ((String) getRTCNow().hour()) +":00") + TimeSpan(0, 1, 0, 0); // After 1 Hour
-  return getRTCNow() + TimeSpan(0, 0, 5, 0); // After 5 mins
+  // return getRTCNow() + TimeSpan(0, 0, 5, 0); // After 5 mins
 }
 
 
@@ -232,9 +229,9 @@ DateTime getNextRunDateTime()
     } else {
       String lastRanDateStr = split(lastRanStateStr, '_', 2);
       //String lastRanTimeStr = split(lastRanStateStr, '_', 3);
-      //! DateTime lastRanDateTime = strToDateTime(lastRanDateStr + "_" + runEveryDayAt);
-      //! return lastRanDateTime + millisToTimeSpan(intervalTime); //TimeSpan(3, 0, 0, 0);
-      return nextPossibleDay();
+      DateTime lastRanDateTime = strToDateTime(lastRanDateStr + "_" + runEveryDayAt);
+      return lastRanDateTime + millisToTimeSpan(intervalTime); //TimeSpan(3, 0, 0, 0);
+      // return nextPossibleDay();
     }
   } else {
     // Check today is possible or take it on tomorrow.
