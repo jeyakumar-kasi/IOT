@@ -30,11 +30,11 @@ void setup() {
 void loop() {
   float rainPercent = getRainingPercent();
   
-  if (rainPercent > 75) {
+  if (rainPercent > 75.0) {
     Serial.print("Heavy Raining.");
-  } else if (rainPercent > 50) {
+  } else if (rainPercent > 50.0) {
     Serial.print("Medium");
-  } else if (rainPercent > 25) {
+  } else if (rainPercent > 25.0) {
     Serial.print("Low");
   } else {
     Serial.print("NO rain!!!");
