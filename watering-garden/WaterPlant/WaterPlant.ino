@@ -2,13 +2,17 @@
 #include <EEPROM.h>
 #include <RTClib.h>
 
+// Important: Must be "false" at production time.
+bool isResetApp = false;
 
-const int redLedPin = 7;
+const int buzzerPin = 5;
 const int blueLedPin = 6; 
+const int redLedPin = 7;
 const int motorCtrlPin = 8;
-const String runEveryDayAt = "08:00"; // HH:MM
-const long intervalTime = (long) 1 * 60 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
-const long motorRunningTime = (long) 10 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
+const String runEveryDayAt = "06:00"; // HH:MM
+// const long intervalTime = (long) 1 * 60 * 60 * 1000; //(long) 3 * 24 * 60 * 60 * 1000; // in millis (3 days)
+const int intervalDays = 2; 
+const long motorRunningTime = (long) 2 * 60 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
 const float lastRanThresholdPercent = 60.0; // Percent to Re-run check after arduino restart.
 
 DateTime initialRTCDateTime;
@@ -188,7 +192,7 @@ bool isTodayRunPossible()
   //int S = split(runEveryDayAt, ':', 3).toInt();
 
   return ((int) getRTCNow().hour() < H) || 
-         ((int) getRTCNow().hour() == H && (int) getRTCNow().minute() <= M); //@check
+         ((int) getRTCNow().hour() == H && (int) getRTCNow().minute() <= M && (int) getRTCNow().second() <= 59); //@check
 }
 
 DateTime nextPossibleDay()
@@ -209,6 +213,7 @@ DateTime getNextRunDateTime()
   // Read the last ran state from EEPROM.
   String lastRanStateStr = (String) read(0); //"59.1_2022-06-28_12:0:10"; 
 
+  Serial.print("[EEPROM] Recorded Data: "); Serial.println(lastRanStateStr);
   if (lastRanStateStr && lastRanStateStr != "") {
     float lastRanStateLevel = split(lastRanStateStr, '_', 1).toFloat(); // 0 -> 50.0 -> 100
 
@@ -219,7 +224,11 @@ DateTime getNextRunDateTime()
       String lastRanDateStr = split(lastRanStateStr, '_', 2);
       String lastRanTimeStr = split(lastRanStateStr, '_', 3);
       DateTime lastRanDateTime = strToDateTime(lastRanDateStr + "_" + lastRanTimeStr);
-      DateTime nextPossibleRanDateTime = lastRanDateTime + millisToTimeSpan(intervalTime); //TimeSpan(3, 0, 0, 0);
+      DateTime nextPossibleRanDateTime = lastRanDateTime + TimeSpan(intervalDays, 0, 0, 0); // millisToTimeSpan(intervalTime); //TimeSpan(3, 0, 0, 0);
+      if (nextPossibleRanDateTime < getRTCNow()) {
+        // Last ran date is too ago, so check for next immediate possible date.
+        return nextPossibleDay();
+      }
       return strToDateTime(dateToStr(nextPossibleRanDateTime) + "_" + runEveryDayAt);
     }
   } else {
@@ -247,6 +256,7 @@ void await_motorRunningTime()
       float tillRanPercent = (float) (100.0/motorRunningTime) * (millis() - _t);
       if (tillRanPercent >= lastRanThresholdPercent) {
         // Update in EEPROM.
+        buzzer(3 * 1000);
         Serial.print(tillRanPercent); Serial.println(" | Updating the threshold percent..."); 
         write(String(tillRanPercent) + "_" + dateTimeToStr(getRTCNow()), 0);
         isThresholdUpdated = true;
@@ -257,8 +267,18 @@ void await_motorRunningTime()
   }
 }
 
+void buzzer(long ms)
+{
+  delay(1000);
+  tone(buzzerPin, 1000); // Send 1kHz sound signal
+  delay(ms);
+  noTone(buzzerPin);
+  delay(1000);
+}
+
 void runMotor()
 {
+  buzzer(5 * 1000);
   Serial.println("Motor - ON");
   DateTime now = getRTCNow();
   write("0_" + dateTimeToStr(now), 0);
@@ -270,6 +290,7 @@ void runMotor()
   // Wait for the motor completes its running state.
   await_motorRunningTime();
 
+  buzzer(10 * 1000);
   //@servo1.write(0);
   digitalWrite(motorCtrlPin, HIGH);
   digitalWrite(blueLedPin, LOW);
@@ -277,7 +298,7 @@ void runMotor()
   Serial.println("Motor - OFF");
   now = getRTCNow();
   write("100_" + dateTimeToStr(now), 0);
-
+  
   // Update "Next Run" date & time
   nextRunAtDateTime = getNextRunDateTime();
 }
@@ -291,7 +312,7 @@ void checkRTCStatus()
   bool isAlerted = false;
   while (! isSetupOk) {
     if (! rtc.begin()) {
-      digitalWrite(redLedPin, HIGH);      
+      digitalWrite(redLedPin, HIGH);
       if (! isAlerted) {
         isAlerted = true;
         Serial.println("RTC is not starting...");
@@ -321,24 +342,43 @@ void checkRTCStatus()
   isAlerted = false;
 }
 
+void resetEEPROM() {
+  Serial.println("Resetting the EEPROM...");
+
+  // Set the last run Motor time as on Today.  
+  write("100_" + dateTimeToStr(getRTCNow()), 0);
+}
+
 void setup() {
   Serial.begin(9600);
   while (!Serial);
   
-  pinMode(redLedPin, OUTPUT);
-  pinMode(blueLedPin, OUTPUT);
-  pinMode(motorCtrlPin, OUTPUT);
-
   // RTC
   rtc.begin();
-  // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  // rtc.adjust(DateTime(2023,1,23, 23, 59, 55)); //!
+  if (isResetApp) {
+    // Reset the time to system time.
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // rtc.adjust(DateTime(2023,1,23, 23, 59, 55));
+    Serial.print("Time set to: "); printDateTime(rtc.now()); Serial.println("\n");   
+
+    // Reset the Storage.    
+    resetEEPROM();
+    Serial.println("Reset is done. Please Re-run by disabling <isResetApp> flag!");
+    while(1);  
+  }    
+  
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(redLedPin, OUTPUT);
+  pinMode(blueLedPin, OUTPUT);
+  pinMode(motorCtrlPin, OUTPUT);  
+  
   checkRTCStatus();
   setInitialRTCDateTime();
   printDateTime(getRTCNow()); Serial.println(" | Welcome!");  
 
   // Update "Next Run" date & time
   nextRunAtDateTime = getNextRunDateTime();
+  buzzer(3 * 1000);
 }
 
 
@@ -357,5 +397,5 @@ void loop() {
       }
     }
 
-    delay(1000);
+    delay(30 * 1000);
 }
