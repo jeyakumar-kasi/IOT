@@ -1,6 +1,9 @@
-
 #include <EEPROM.h>
 #include <RTClib.h>
+#include "uEEPROMLib.h"
+
+// uEEPROMLib eeprom;
+uEEPROMLib eeprom(0x50);
 
 // Important: Must be "false" at production time.
 bool isResetApp = false;
@@ -32,6 +35,44 @@ char daysOfTheWeek[7][12] = {
 };
 
 // ----------------------[ Utils ]--------------------------------
+// RTC RAM
+// void writeRTC(const char c_string[]) {
+void writeRTC(const String &msg) {
+  int string_length = msg.length() + 1;
+  char c_string[string_length];
+  msg.toCharArray(c_string, string_length);
+
+  // char c_string[] = "100_2023-02-04_12:0:0"; 
+  // int string_length = strlen(c_string);  
+  if (! eeprom.eeprom_write(0, string_length)) {
+    Serial.println("Failed to store the Length.");
+  } else {
+    // Write a long string of chars FROM position 10 which isn't aligned to the 32 byte pages of the EEPROM
+    if (! eeprom.eeprom_write(10, (byte *) c_string, string_length)) {
+      Serial.println("Failed to store string.");
+    }
+  }  
+}
+
+String readRTC()
+{
+  int len = 0; 
+  eeprom.eeprom_read(0, &len);
+  // Serial.println(len);
+
+  // Serial.print("string: ");
+  char s[len];
+  eeprom.eeprom_read(10, (byte *) s, len); 
+  char msg[len];
+  for (int i = 0; i < len; i++) {
+    msg[i] = s[i];
+  }
+
+  // Add trailing space
+  msg[len] = '\0';
+  return msg;
+}
+
 // EEPROM
 void write(const String &msg, unsigned int pos=0)
 {
@@ -211,7 +252,7 @@ DateTime nextPossibleDay()
 DateTime getNextRunDateTime()
 {
   // Read the last ran state from EEPROM.
-  String lastRanStateStr = (String) read(0); //"59.1_2022-06-28_12:0:10"; 
+  String lastRanStateStr = (String) readRTC(); // read(0); //"59.1_2022-06-28_12:0:10"; 
 
   Serial.print("[EEPROM] Recorded Data: "); Serial.println(lastRanStateStr);
   if (lastRanStateStr && lastRanStateStr != "") {    
@@ -236,6 +277,7 @@ DateTime getNextRunDateTime()
     //!return nextPossibleDay(); 
 
     // @temp: Run after 2 days
+    // writeRTC("100_" + dateTimeToStr(now)); // Reset to complete on tomorrow to continue from next powercut as usual.
     DateTime nextPossibleRanDateTime = getRTCNow() + TimeSpan(2, 0, 0, 0);
     return strToDateTime(dateToStr(nextPossibleRanDateTime) + "_" + runEveryDayAt);
   }
@@ -262,8 +304,8 @@ void await_motorRunningTime()
         // Update in EEPROM.
         buzzer(3 * 1000);
         Serial.print(tillRanPercent); Serial.println(" | Updating the threshold percent..."); 
-        write(String(tillRanPercent) + "_" + dateTimeToStr(getRTCNow()), 0);
-        isThresholdUpdated = true;
+        // write(String(tillRanPercent) + "_" + dateTimeToStr(getRTCNow()), 0);
+        writeRTC(String(tillRanPercent) + "_" + dateTimeToStr(getRTCNow()));
       }
     }
 
@@ -285,7 +327,8 @@ void runMotor()
   buzzer(5 * 1000);
   Serial.println("Motor - ON");
   DateTime now = getRTCNow();
-  write("0_" + dateTimeToStr(now), 0);
+  // write("0_" + dateTimeToStr(now), 0);
+  writeRTC("0_" + dateTimeToStr(now));  
 
   //@servo1.write(90);
   digitalWrite(motorCtrlPin, LOW);
@@ -301,7 +344,8 @@ void runMotor()
 
   Serial.println("Motor - OFF");
   now = getRTCNow();
-  write("100_" + dateTimeToStr(now), 0);
+  // write("100_" + dateTimeToStr(now), 0);
+  writeRTC("100_" + dateTimeToStr(now));
   
   // Update "Next Run" date & time
   nextRunAtDateTime = getNextRunDateTime();
@@ -350,7 +394,8 @@ void resetEEPROM() {
   Serial.println("Resetting the EEPROM...");
 
   // Set the last run Motor time as on Today.  
-  write("100_" + dateTimeToStr(getRTCNow()), 0);
+  // write("100_" + dateTimeToStr(getRTCNow()), 0);
+  writeRTC("100_" + dateTimeToStr(getRTCNow()));
 }
 
 void setup() {

@@ -79,14 +79,31 @@ void setup() {
   rtc.begin();
   //rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   
-  Serial.print("Writing ...");
-  write("100_2023-01-01_21:30:00", 0);
-  Serial.println(" Done.");
+  // Serial.print("Writing ...");
+  // write("100_2023-01-01_21:30:00", 0);
+  // Serial.println(" Done.");
+
+  // Serial.print("Reading ...");
+  // String msg = (String) read(0);
+  // Serial.println(msg);
+
+  // // 60.1  
+  // Serial.print("Writing ...");
+  // write("60.1_2023-01-01_21:3:0", 0);
+  // Serial.println(" Done.");
+
+  // Serial.print("Reading ...");
+  // msg = (String) read(0);
+  // Serial.println(msg);
+
+  // // 100
+  // Serial.print("Writing ...");
+  // write("100_2023-01-01_21:3:0", 0);
+  // Serial.println(" Done.");
 
   Serial.print("Reading ...");
   String msg = (String) read(0);
   Serial.println(msg);
-
 }
 
 void loop() {
