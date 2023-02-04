@@ -214,7 +214,7 @@ DateTime getNextRunDateTime()
   String lastRanStateStr = (String) read(0); //"59.1_2022-06-28_12:0:10"; 
 
   Serial.print("[EEPROM] Recorded Data: "); Serial.println(lastRanStateStr);
-  if (lastRanStateStr && lastRanStateStr != "") {
+  if (lastRanStateStr && lastRanStateStr != "") {    
     float lastRanStateLevel = split(lastRanStateStr, '_', 1).toFloat(); // 0 -> 50.0 -> 100
 
     if (lastRanStateLevel <= (float) lastRanThresholdPercent) {
@@ -233,7 +233,11 @@ DateTime getNextRunDateTime()
     }
   } else {
     // Check today is possible or take it on tomorrow.
-    return nextPossibleDay();
+    //!return nextPossibleDay(); 
+
+    // @temp: Run after 2 days
+    DateTime nextPossibleRanDateTime = getRTCNow() + TimeSpan(2, 0, 0, 0);
+    return strToDateTime(dateToStr(nextPossibleRanDateTime) + "_" + runEveryDayAt);
   }
 }
 
