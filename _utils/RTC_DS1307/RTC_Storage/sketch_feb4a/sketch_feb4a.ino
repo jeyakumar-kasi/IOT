@@ -124,7 +124,7 @@ void setup() {
   // Serial.println((int) len);
 
   // writeRTC("60.1_2023-02-04_12:0:0");
-  writeRTC(String(100) + "_2023-02-04_12:30:00");
+  writeRTC(String(100) + "_2023-02-05_12:30:00");
   String data = (String) readRTC(); 
   Serial.println(data);
  
