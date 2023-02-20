@@ -1,3 +1,23 @@
+/**
+ * Automated irrigation system
+ * ------------------------------------------------------------
+ * Will turn on the Water Pump at certain interval of days (configurable)
+ * and will turn off after some amount of time.
+ *
+ * It uses the RTC (Real Time Clock - DS1307) to keep track of the date and 
+ * the EEPROM is used to store the last ran state information such as "The 
+ * percentage of ran, Last ran date".
+ *
+ * The advantage with this system, It can start from its previous level whenever 
+ * the board is runnning out of power. By default, the time will reset to zero when 
+ * an Arduino lost the power.
+
+ * Author     : Jeyakumar Kasi
+ * Email      : dev.jeyakumar@gmail.com 
+ * Website    : http://hyproid.com/jeyakumar-kasi
+ * Created On : Feb 20, 2023 09:37:00 
+ **/                 
+ 
 #include <EEPROM.h>
 #include <RTClib.h>
 #include "uEEPROMLib.h"
@@ -18,6 +38,7 @@ const int intervalDays = 2;
 const long motorRunningTime = (long) 2 * 60 * 60 * 1000; //(long) 2 * 60 * 60 * 1000; // in millis (2 Hrs)
 const float lastRanThresholdPercent = 60.0; // Percent to Re-run check after arduino restart.
 
+unsigned int previousDay = 0; 
 DateTime initialRTCDateTime;
 DateTime nextRunAtDateTime;
 
@@ -248,13 +269,26 @@ DateTime nextPossibleDay()
   }
 }
 
-
-DateTime getNextRunDateTime()
+String checkLastRanState()
 {
   // Read the last ran state from EEPROM.
   String lastRanStateStr = (String) readRTC(); // read(0); //"59.1_2022-06-28_12:0:10"; 
 
   Serial.print("[EEPROM] Recorded Data: "); Serial.println(lastRanStateStr);
+  if (! lastRanStateStr || lastRanStateStr == "") {
+    // Last ran state is unknown. Reset it as ran on 1 day before.
+    Serial.print("[EEPROM] Resetting to 1 day before...");
+    lastRanStateStr = "99.9_" + dateTimeToStr(getRTCNow() - TimeSpan(1, 0, 0, 0));    
+    Serial.println(": " + lastRanStateStr);    
+    writeRTC(lastRanStateStr); 
+  }
+
+  return lastRanStateStr;
+}
+
+DateTime getNextRunDateTime()
+{
+  String lastRanStateStr = checkLastRanState();
   if (lastRanStateStr && lastRanStateStr != "") {    
     float lastRanStateLevel = split(lastRanStateStr, '_', 1).toFloat(); // 0 -> 50.0 -> 100
 
@@ -420,12 +454,14 @@ void setup() {
   pinMode(redLedPin, OUTPUT);
   pinMode(blueLedPin, OUTPUT);
   pinMode(motorCtrlPin, OUTPUT);  
+  digitalWrite(motorCtrlPin, HIGH); // OFF
   
   checkRTCStatus();
   setInitialRTCDateTime();
   printDateTime(getRTCNow()); Serial.println(" | Welcome!");  
 
   // Update "Next Run" date & time
+  previousDay = (int) getRTCNow().day();
   nextRunAtDateTime = getNextRunDateTime();
   buzzer(3 * 1000);
 }
@@ -434,12 +470,18 @@ void setup() {
 
 void loop() {
     // checkRTCStatus();
-    printDateTime(getRTCNow()); Serial.print(" | Next Run: "); 
-    printDateTime(nextRunAtDateTime); Serial.println();  
+    DateTime today = getRTCNow(); 
+    printDateTime(today); Serial.print(" | Next Run: "); 
+    printDateTime(nextRunAtDateTime); Serial.println(); 
+    
+    if ((int) today.day() != previousDay) {
+      previousDay = (int) today.day();
+      checkLastRanState();
+    }      
 
-    if ((int) getRTCNow().day() == (int) nextRunAtDateTime.day()) {
-      if ((int) getRTCNow().hour() == (int) nextRunAtDateTime.hour()) {
-        if ((int) getRTCNow().minute() == (int) nextRunAtDateTime.minute()) {
+    if ((int) today.day() == (int) nextRunAtDateTime.day()) {
+      if ((int) today.hour() == (int) nextRunAtDateTime.hour()) {
+        if ((int) today.minute() == (int) nextRunAtDateTime.minute()) {
           Serial.println("Start to run the Motor...");
           runMotor();
         }
