@@ -1,0 +1,103 @@
+
+Modules:
+#1. Automatic Light ON/OFF (6PM - 6AM)
+#2. Water Level Indicator
+#3. Automatic Watering Garden (daily)
+#4. Auto Running Speaker System (daily @6AM)
+5. CCTV - Person Moving Detection
+6. Automatic surveillance (Drone system)
+
+
+
+dev: https://www.google.com/search?q=can+we+use+0.75sq+mm+wire+for+iot+projects%3F&gs_lcrp=EgZjaHJvbWUyBggAEEUYOdIBCTE4NjE5ajBqN6gCA7ACAQ&client=ms-android-samsung-ss&sourceid=chrome-mobile&source=chrome.ob&ie=UTF-8&udm=50&fbs=ABfTbFWX8Can4Rb7JjuFvBw79YrXQMyJMofRft37fxW-VQ0iJcb-TVtMT2eZIreEjxT1y-wet8Jc7IradkhDtUydXc0mE7n-nLtATchfgeTZ9kGgqlElbDfZoo_9FRX-Uk7c_pjrLrqOBlwKP8TpSfymF6tPB9lJIylrXcYWypY-7v4wTL09VeptkKDntTuiZMLTvqq_ygToyFKLILK0N0Xy4yrknaumqVHA7jCQcs5YZGdKxSfhVto&aep=10&ntc=1&sxsrf=APpeQnsLrIzw9XAESy1EMEZwRrJyavjt1w%3A1786820846645&mstk=AUtExfAgk0EGEy9zTXAGfKEyvjZT0dD_bOiEbqLyqSxcmyxHCDh75UWlbSFth4R85ep9jW7hYYxitcH4fR7wJlH-2DSNRv8Y9gLPKhWRZoSA4d2dNUMfhZXtiLVIAI1ZUCGPbAON47RPWMUQ1083xdMsOa81n0_7s8un6DLNP7cjLxDDGDH8qqCdlnwjwY8Xmth5WDyEcfZAomBIjYqOzN6WZbPuTZ4aTkZR1ro3aHfZKLU4CFH_Zsmns8oZZ8zF_C2lATgGdBO84CF9QPU9H1xT6nuKUibHmvAn1oZ1qDYlY1gMzv_BYtM5-9BN2CN9Wc9bNStbn-sYMnR1v_wIawcuCPSDLP8LEmJLN9kmrdHXr38GiQ_62b2cGtK0iGI5svs5R3gBtla6HOMfBZntApp1RoT30qCnQdU-AQeH2bhvH2W2J5SJOyGhuY78tYGPjjlf2GDH1HzgwyQ&csuir=1&aioh=3&mtid=Z7mAaonlAdqhnesPq8XMkAU&atvm=2#lfId=ChxjMe
+
+
+Robotics:
+Buy a modest development setup:
+   1. ESP32
+   2. Arduino
+   3. Raspberry Pi/alternative SBC
+   4. sensors
+   5. servos
+   6. DC motors
+   7. motor drivers
+   8. IMU
+   9. camera
+
+
+----------------------
+
+Humanoid Robot Hardware Blueprint:
+==================================
+1️⃣ Main Compute (Robot Brain)
+Component		    		Example            				         Why 
+Edge AI computer   NVIDIA Jetson Orin Nano Developer Kit    		Run AI models locally
+Microcomputer           Raspberry Pi 5                   	     Robot control and networking
+
+💡 Most robots use Jetson for AI + Raspberry Pi for system control.
+
+2️⃣ Vision System (Robot Eyes)
+Component					Example									 Why
+RGB camera			Intel RealSense D435i						    Object detection
+Depth sensor			Intel RealSense D455					    3D environment mapping
+
+These enable:
+object recognition
+distance estimation
+obstacle detection
+
+3️⃣ Audio System (Robot Ears)
+Component					Example									Why
+Microphone array		ReSpeaker 4-Mic Array for Raspberry Pi		  Voice commands
+Speaker					generic speaker module					 Robot speech output
+
+Used for:
+speech recognition
+human interaction
+
+4️⃣ Motion System (Robot Body)
+Humanoid robots require many actuators.
+Component					Example									Why
+Servo motors				Dynamixel XM430-W350					Precise joint movement
+Motor controller		Pololu Maestro Servo Controller					Control multiple motors
+
+Typical humanoid robot:
+12–20 servo motors
+joints for arms, legs, head
+
+5️⃣ Sensors
+Sensor						Example									Why
+IMU							Bosch BNO055							Balance
+Lidar						RPLIDAR A1M8							Mapping
+Touch sensors					force sensors								Object manipulation
+
+These allow the robot to:
+balance
+map environment
+detect contact
+
+6️⃣ Embedded Controllers
+Low-level control for motors and sensors.
+Controller					Example									Why
+Microcontroller			Arduino Mega 2560							Motor control
+Power regulator				DC converter							Power management
+
+
+7️⃣ Robot Frame
+Humanoid structure:
+Component			     			Option								
+Frame	 					aluminum or 3D-printed		
+Joint brackets		     			servo mounts
+Robot hands					gripper or robotic hand
+
+Many hobby robots use 3D printed parts.
+
+8️⃣ Power System
+Component							Example
+Battery							LiPo battery pack
+Voltage regulator					DC-DC converter
+
+Typical humanoid prototype:
+12V–24V system
+5000–10000 mAh battery
+
