@@ -1,3 +1,11 @@
+/**
+* Switch ON/OFF the Lights - daily (@6PM to 6 AM)
+*
+* @Module    : As part of "Smart Home Automation" Project.
+* @Author    : jeyakumar.kasi@hyproid.com
+* @Created on: Fri Sep 09, 2026 23:53 
+*/
+
 #include <Wire.h>
 #include "RTClib.h"
 
