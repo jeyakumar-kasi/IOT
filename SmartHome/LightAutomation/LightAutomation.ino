@@ -19,6 +19,9 @@ const int ldrPin = A1;       // Connect LDR voltage divider signal here
 const int sqwPin = 2;       
 const int lightRelayPin = 7; 
 const int buttonPin = 3;     // Push button connected to GND
+const int errorPin = 5;      // LED Indicators
+const int allOkPin = 4;
+const int runningPin = 6;
 
 // --- OVERNIGHT SCHEDULE CONFIGURATION (24-Hour Format) ---
 const int startHour = 18;   // 6:00 PM (Scheduled ON)
@@ -48,7 +51,7 @@ const unsigned long debounceDelay = 50;
 
 // Strings for boot logging and display
 String bootTimestamp = "";
-const char* daysOfTheWeek[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+const char* daysOfTheWeek[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
 void setup() {
   Serial.begin(9600);
@@ -61,9 +64,15 @@ void setup() {
   pinMode(buttonPin, INPUT_PULLUP);
   pinMode(sqwPin, INPUT_PULLUP); 
 
+  # LED Indicators
+  pinMode(errorPin, OUTPUT);
+  pinMode(allOkPin, OUTPUT);
+  pinMode(runningPin, OUTPUT);
+
   // --- ONE-TIME HARDWARE RTC STARTUP PIN PULL ---
   if (!rtc.begin()) {
     Serial.println("Error: Could not find DS1307 RTC!");
+    digitalWrite(errorPin, HIGH);
     while (1); 
   }
 
@@ -94,6 +103,9 @@ void setup() {
   Serial.println(bootTimestamp);
   Serial.println("RTC Hardware disconnected safely. Using internal crystal tracking.");
   Serial.println("=========================================");
+
+  digitalWrite(errorPin, LOW); 
+  digitalWrite(allOkPin, HIGH);
 }
 
 void loop() {
@@ -159,9 +171,11 @@ void loop() {
 
   // ACTIVE-LOW TRANSLATION CONTROL
   if (shouldBeOn) {
+    digitalWrite(runningPin, HIGH);
     digitalWrite(lightRelayPin, LOW);  // LOW turns the Active-Low isolated relay ON
   } else {
     digitalWrite(lightRelayPin, HIGH); // HIGH turns the Active-Low isolated relay OFF
+    digitalWrite(runningPin, LOW);
   }
 
   // 6. NON-BLOCKING SERIAL PRINTER & CACHED BATTERY LOGIC
@@ -172,7 +186,9 @@ void loop() {
     Serial.print("Booted: ["); Serial.print(bootTimestamp); Serial.print("] | ");
 
     // Print Current Date & Time
-    Serial.print("["); Serial.print(daysOfTheWeek[now.dayOfTheWeek()]); Serial.print("] ");
+    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]); Serial.print(' ');
+    if (now.month() < 10) Serial.print('0'); Serial.print(now.month(), DEC); Serial.print('-');
+    if (now.day() < 10) Serial.print('0'); Serial.print(now.day(), DEC); Serial.print(' ');
     if (now.hour() < 10) Serial.print('0'); Serial.print(now.hour(), DEC); Serial.print(':');
     if (now.minute() < 10) Serial.print('0'); Serial.print(now.minute(), DEC); Serial.print(':');
     if (now.second() < 10) Serial.print('0'); Serial.print(now.second(), DEC);

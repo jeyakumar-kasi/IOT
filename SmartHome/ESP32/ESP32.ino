@@ -1,121 +1,110 @@
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include <WebServer.h>
 
-// Wi-Fi Credentials
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+// ==================== CONFIGURATION SECTOR ====================
+const char* ssid     = "YOUR_WIFI_SSID";     // Your Wi-Fi Router Name
+const char* password = "YOUR_WIFI_PASSWORD"; // Your Wi-Fi Router Password
 
-// Pin Definitions
-const int TRIG_PIN = 5;
-const int ECHO_PIN = 18;
-const int RELAY_VALVE_PIN = 19;
-const int ROOFTOP_ALARM_PIN = 21; // Optional: Connect a light/buzzer for night security
+// Static IP Address of the 2nd-Floor Rooftop ESP8266
+const String roofESP_IP = "http://192.168.1"; 
+// ==============================================================
 
-// Web Server on port 80
+// Pin Definitions for 30-Pin ESP32
+const int P43_FLOAT_PIN = 4;   // GPIO 4 for the ground tank P43 float switch
+const int PUMP_RELAY_PIN = 19; // GPIO 19 for the Optocoupled Pump Relay
+
+// Host a local server on port 80 so your 1st-floor PC can read data if it's awake
 WebServer server(80);
 
-// Timing Variables (Non-blocking)
-unsigned long lastSensorRead = 0;
-const long sensorInterval = 10000; // Read tank every 10 seconds
-
-unsigned long irrigationStartTime = 0;
-const long irrigationDuration = 900000; // 15 minutes in milliseconds
-bool isIrrigating = false;
-
-int currentTankDistance = 0;
-const int MIN_TANK_LEVEL_CM = 150; // Safety cutoff threshold
+unsigned long lastNetworkCheck = 0;
+const long checkInterval = 20000; // Pull data from the roof every 20 seconds
+int overheadTankDistance = 0;
 
 void setup() {
   Serial.begin(115200);
   
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-  pinMode(RELAY_VALVE_PIN, OUTPUT);
-  pinMode(ROOFTOP_ALARM_PIN, OUTPUT);
-  
-  // Set relays to default OFF state (Assuming active-low relay boards)
-  digitalWrite(RELAY_VALVE_PIN, HIGH);
-  digitalWrite(ROOFTOP_ALARM_PIN, HIGH);
+  pinMode(P43_FLOAT_PIN, INPUT_PULLUP);
+  pinMode(PUMP_RELAY_PIN, OUTPUT);
+  digitalWrite(PUMP_RELAY_PIN, HIGH); // Default Pump OFF (Active-Low Relay)
 
   // Connect to your Wi-Fi Router
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to Wi-Fi");
+  Serial.print("Connecting Master ESP32 to Wi-Fi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nConnected!");
-  Serial.print("ESP32 Static Local IP: ");
-  Serial.println(WiFi.localIP()); // Paste this IP address into your desktop Python script
+  Serial.println("\nMaster ESP32 Connected!");
+  Serial.print("Ground Floor IP Address (Ensure Router Locks This): ");
+  Serial.println(WiFi.localIP()); // Should be locked to 192.168.1.60
 
-  // Define Web Server Routes
   server.on("/", handleRoot);
-  server.on("/trigger_alarm", handleAlarm);
-  server.on("/start_irrigation", handleStartIrrigation);
-  
   server.begin();
 }
 
 void loop() {
-  server.handleClient(); // Handle incoming network requests from your PC
+  server.handleClient(); // Listen for requests from the desktop PC
   unsigned long currentMillis = millis();
 
-  // TASK 1: Read Water Tank Level Every 10 Seconds
-  if (currentMillis - lastSensorRead >= sensorInterval) {
-    lastSensorRead = currentMillis;
-    currentTankDistance = readUltrasonic();
-    
-    // SAFETY CHECK: Force close valve if water tank is too low
-    if (currentTankDistance > MIN_TANK_LEVEL_CM && isIrrigating) {
-      stopIrrigation();
-    }
+  // Task 1: Periodically fetch water level data from the 2nd-floor roof over Wi-Fi
+  if (currentMillis - lastNetworkCheck >= checkInterval) {
+    lastNetworkCheck = currentMillis;
+    fetchRooftopData();
   }
 
-  // TASK 2: Manage Automatic Irrigation Cutoff
-  if (isIrrigating && (currentMillis - irrigationStartTime >= irrigationDuration)) {
-    stopIrrigation();
+  // Task 2: Core Hardware Interlock Protection Logic
+  int groundSourceWater = digitalRead(P43_FLOAT_PIN);
+
+  // If the ground-floor backup tank goes dry (Float switch triggers HIGH)
+  if (groundSourceWater == HIGH) { 
+    Serial.println("🚨 CRITICAL FAULT: Ground Source Tank Empty! Forcing Pump OFF.");
+    digitalWrite(PUMP_RELAY_PIN, HIGH); 
+  } 
+  else if (overheadTankDistance > 0 && overheadTankDistance < 30) {
+    // Water is closer than 30cm to rooftop sensor = Overhead tank is full!
+    Serial.println("✅ Overhead Tank Full. Turning Pump OFF.");
+    digitalWrite(PUMP_RELAY_PIN, HIGH);
+  }
+  else if (overheadTankDistance > 120 && groundSourceWater == LOW) {
+    // Tank is low (water far away from sensor) and ground water is available
+    Serial.println("💧 Overhead Tank Low. Activating 55W Pump.");
+    digitalWrite(PUMP_RELAY_PIN, LOW); // Turn relay ON
   }
 }
 
-// Function to handle the home page URL (e.g., http://192.168.1)
+// Function to handle the desktop PC checking the master status
 void handleRoot() {
-  String statusMsg = "Water Tank Distance: " + String(currentTankDistance) + " cm\n";
-  statusMsg += "Irrigation Status: " + String(isIrrigating ? "ON" : "OFF");
-  server.send(200, "text/plain", statusMsg);
+  String response = "Ground Floor Master Status:\n";
+  response += "Overhead Tank Distance: " + String(overheadTankDistance) + " cm\n";
+  response += "Ground Tank Status: " + String(digitalRead(P43_FLOAT_PIN) == LOW ? "OK" : "EMPTY") + "\n";
+  response += "Pump Status: " + String(digitalRead(PUMP_RELAY_PIN) == LOW ? "RUNNING" : "STOPPED");
+  server.send(200, "text/plain", response);
 }
 
-// Function triggered by Python PC when a human is spotted at night
-void handleAlarm() {
-  server.send(200, "text/plain", "Rooftop alarm activated!");
-  digitalWrite(ROOFTOP_ALARM_PIN, LOW); // Turn on rooftop light/alarm (Active Low)
-  delay(3000);                          // Brief delay for the alarm trigger
-  digitalWrite(ROOFTOP_ALARM_PIN, HIGH); // Turn off
-}
+// Wireless background network request to pull data from the roof ESP8266
+void fetchRooftopData() {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(roofESP_IP);
+    int httpCode = http.GET();
+    
+    if (httpCode > 0) {
+      String payload = http.getString();
 
-// Function to trigger irrigation via a browser or local network call
-void handleStartIrrigation() {
-  if (currentTankDistance < MIN_TANK_LEVEL_CM) {
-    isIrrigating = true;
-    irrigationStartTime = millis();
-    digitalWrite(RELAY_VALVE_PIN, LOW); // Open valve
-    server.send(200, "text/plain", "Irrigation started successfully.");
-  } else {
-    server.send(200, "text/plain", "Error: Tank level too low to irrigate.");
+      // Look for the "Water Tank Distance:" text inside the roof response
+      int index = payload.indexOf("Water Tank Distance:");
+      if (index != -1) {
+        int start = index + String("Water Tank Distance:").length();
+        int end = payload.indexOf("cm", start);
+        String distanceStr = payload.substring(start, end);
+        distanceStr.trim();
+        overheadTankDistance = distanceStr.toInt();
+        Serial.printf("Live Wireless Data -> Roof Tank Distance: %d cm\n", overheadTankDistance);
+      }
+    } else {
+      Serial.println("⚠️ Connection Error: Failed to contact Rooftop ESP8266.");
+    }
+    http.end();
   }
-}
-
-void stopIrrigation() {
-  isIrrigating = false;
-  digitalWrite(RELAY_VALVE_PIN, HIGH); // Close valve
-}
-
-int readUltrasonic() {
-  digitalWrite(TRIG_PIN, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
-  
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-  return duration * 0.034 / 2;
 }
