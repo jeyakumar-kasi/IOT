@@ -35,7 +35,7 @@ const char* password = "MY_WIFI_PASSWORD"; // Wi-Fi Router Password
 const String roofESP_IP = "http://192.168.1.50"; 
 
 // Main Pump (1.5hp) 
-const int MAIN_PUMP_MAX_RUN_MIN = 10 // Mins (Max. continuous run)
+const int MAIN_PUMP_MAX_RUN_MIN = 10; // Mins (Max. continuous run)
 
 // --- IRRIGATION PUMP SCHEDULE CONFIGURATION (24-Hour Format) ---
 const int startHour = 6;    // 6:00 AM (Scheduled ON)
@@ -390,6 +390,7 @@ void fetchRooftopData() {
       }
     } else {
       // WATCHDOG INTERCEPT: The network signal dropped mid-execution!
+      //⚠️ Connection Error: Failed to contact Rooftop ESP8266
       isRooftopOnline = false;
       overheadTankDistance = 0;
       digitalWrite(errorPin, HIGH); // Illuminate error LED indicator
@@ -402,9 +403,9 @@ void fetchRooftopData() {
         digitalWrite(PUMP2_RELAY_PIN, HIGH);
         isPump1Running = false;
         Serial.println("\n🚨 WATCHDOG FAULT: Rooftop Node lost! Emergency Shutdown Pump #1 (1.5HP) immediately.");
-        }
       }
+    } // else:httpcode
       
-      http.end();
-    }
-  }
+    http.end();
+  } // if:WI-FI Status
+}
