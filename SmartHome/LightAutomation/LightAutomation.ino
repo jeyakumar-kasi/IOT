@@ -56,6 +56,7 @@ const char* daysOfTheWeek[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 void setup() {
   Serial.begin(9600);
   while (!Serial); 
+  Serial.println("Starting an Application...");
 
   // ACTIVE-LOW SETUP: Initialize pin and immediately set HIGH (Relay OFF)
   pinMode(lightRelayPin, OUTPUT);
@@ -64,7 +65,7 @@ void setup() {
   pinMode(buttonPin, INPUT_PULLUP);
   pinMode(sqwPin, INPUT_PULLUP); 
 
-  # LED Indicators
+  // LED Indicators
   pinMode(errorPin, OUTPUT);
   pinMode(allOkPin, OUTPUT);
   pinMode(runningPin, OUTPUT);
@@ -78,7 +79,7 @@ void setup() {
 
   // NOTE: If you ever need to manually set the time again in the future, 
   // uncomment the line below, adjust the values, upload once, then comment it back out.
-  // rtc.adjust(DateTime(2026, 9, 18, 23, 28, 05)); 
+  // rtc.adjust(DateTime(2026, 9, 26, 21, 14, 05)); 
 
 
   // Turn off the hardware square wave generator to conserve extra hardware energy

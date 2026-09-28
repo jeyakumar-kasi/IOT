@@ -4,6 +4,15 @@
   recognition. The application processes twelve parallel RTSP CCTV streams while incorporating dynamic 
   internet-connection failover for media playback.
 
+  Alert System:
+  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  Event Type Trigger           |   Automated Hardware Response            |  Voice Notification Pattern                                        |   Meaning / System Condition
+  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  CCTV Intruder Spotted        |  winsound.Beep(800, 400) (2 Slow Beeps)  | "Warning. Intruder spotted at the [Camera Name]."                  |  The RTX 2060 GPU identified a human profile inside a night security camera feed.
+  Rooftop Sensor Disconnection | winsound.Beep(2000, 150) (3 Fast Chirps) | "Alert. Communication lost with second floor rooftop tank sensor." | The 2nd-floor ESP8266 is powered down or outside Wi-Fi range; Pump #1 has been auto-stopped for safety.
+  Pump #1 Lockout Active       |      Console Log Warning Printout        | None (Silent execution intercept)                                  | The 1.5 HP pump ran for 20 minutes continuously. The ESP32 cut the relay and will reset it at midnight.
+  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
   @author: jeyakumar.kasi@hyproid.com
   @version: 1.0.0
   @created on: Sat Sep 19, 2026 13:21
@@ -11,26 +20,31 @@
 
 import os
 import sys
+import cv2
 import time
+import socket
+import pyttsx3
+import logging
 import datetime
+import winsound  
+import requests
+import threading
 import subprocess
 import webbrowser
-import threading
-import requests
-import speech_recognition as sr
-import pyttsx3
-import cv2
 from ultralytics import YOLO
+import speech_recognition as sr
+from logging.handlers import TimedRotatingFileHandler
+
 
 # ==================== CONFIGURATION SECTOR ====================
 MASTER_ESP32_IP = "http://192.168.1.60"                            # Ground Floor Master IP
 YOUTUBE_PLAYLIST = "https://youtube.com"                           # Christian Music Online URL
-OFFLINE_MUSIC_DIR = r"C:\Music"                                    # Backup local folder for MP3s
+OFFLINE_MUSIC_DIR = r"C:\SMART_HOME\Music"                         # Backup local folder for MP3s
 VLC_PATH = r"C:\Program Files\VideoLAN\VLC\vlc.exe"                # Standard VLC install path
+LOG_FILE_PATH = r"C:\SMART_HOME\logs\water_system_log.txt"         # Primary Log Output
 PLAY_CMD = "play"
 
-
-# List all 12 of your CCTV Stream URLs (Mix of wired/wireless RTSP streams)
+# List of all 12 CCTV Stream URLs (Mix of wired/wireless RTSP streams)
 # Tip: Test with 0 or 1 for local webcams during bench setup
 # (Optimized using camera SUB-STREAMS, i.e "/stream2" )
 CCTV_STREAMS = {
@@ -57,10 +71,25 @@ if 6 <= current_hour < 18:
     os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
     sys.exit()
 
+# --- AUTOMATED TIMED LOG ROTATION SETUP ---
+os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+logger = logging.getLogger("WaterSystemLogger")
+logger.setLevel(logging.INFO)
+
+# when='D' means rotate daily, interval=1 means every single day, backupCount=90 keeps files for exactly 3 months
+rotation_handler = TimedRotatingFileHandler(
+    LOG_FILE_PATH, when="D", interval=1, backupCount=90, encoding="utf-8"
+)
+
+# Format standard: [2026-09-28 21:55:01] INFO: Log Message text strings
+log_formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+rotation_handler.setFormatter(log_formatter)
+logger.addHandler(rotation_handler)
+
 # Initialize Offline Text-to-Speech Engine
 engine = pyttsx3.init()
 engine.setProperty('rate', 150)
-voice_lock = threading.Lock() # Prevents overlapping text-to-speech output
+voice_lock = threading.Lock()  # Prevents overlapping text-to-speech output
 
 def speak(text):
     with voice_lock:
@@ -71,8 +100,14 @@ def speak(text):
 def is_internet_active():
     try:
         # Check internet status by hitting Cloudflare's lightweight DNS endpoint
-        requests.get("https://1.1.1", timeout=2)
+        # requests.get("https://1.1.1.1", timeout=2)
+
+        # Connect to Google's public DNS server on port 53 (DNS)
+        # Timeout set to 3 seconds to avoid long hangs
+        socket.create_connection(("8.8.8.8", 53), timeout=3)
         return True
+    except OSError:
+        return False
     except:
         return False
 
@@ -104,6 +139,60 @@ def voice_recognition_worker():
                     launch_music_engine()
             except:
                 pass
+
+# --- NETWORK MONITORING LOG & HARDWARE SPEAKERS WORKER ---
+def network_telemetry_worker():
+    """Background loop that polls the master ESP32, parses logs, updates the rotated database, and speaks faults."""
+    last_network_fault = 0
+    fault_cooldown = 30  
+    last_known_pump1 = "STOPPED"
+    last_known_pump2 = "STOPPED"
+    
+    logger.info("Database Telemetry Logging Engine started successfully with a 3-month automated retention profile.")
+    
+    while True:
+        try:
+            res = requests.get(MASTER_ESP32_IP, timeout=3)
+            log_payload = res.text
+            
+            # Parse Pump States
+            current_pump1 = "RUNNING" if "Pump 1 (1.5HP) Status: RUNNING" in log_payload else "STOPPED"
+            current_pump2 = "RUNNING" if "Pump 2 (55W) Status: RUNNING" in log_payload else "STOPPED"
+            
+            # Log changes in Pump #1 (1.5 HP) status
+            if current_pump1 != last_known_pump1:
+                logger.info(f"PUMP 1 (1.5HP) changed state from {last_known_pump1} to {current_pump1}")
+                last_known_pump1 = current_pump1
+                
+            # Log changes in Pump #2 (55W) status
+            if current_pump2 != last_known_pump2:
+                logger.info(f"PUMP 2 (55W) changed state from {last_known_pump2} to {current_pump2}")
+                last_known_pump2 = current_pump2
+            
+            # Log & Alert: Rooftop Link Status
+            if "Rooftop Link: DISCONNECTED" in log_payload:
+                now = time.time()
+                if now - last_network_fault > fault_cooldown:
+                    last_network_fault = now
+                    print("⚠️ MONITOR NOTICE: Rooftop node connection drop detected in master log array.")
+                    logger.error("Rooftop ESP8266 node went OFFLINE.")
+                    
+                    winsound.Beep(2000, 150)
+                    winsound.Beep(2000, 150)
+                    winsound.Beep(2000, 150)
+                    threading.Thread(target=speak, args=("Alert. Communication lost with second floor rooftop tank sensor.",), daemon=True).start()
+            
+            # Log: Pump 1 Lockout Status
+            if "Pump 1 Lockout Status: LOCKED" in log_payload:
+                print("🚨 WARNING: 1.5 HP pump is locked out due to continuous 20-minute execution threshold exception.")
+                logger.warning("1.5HP Pump Safety Lockout Enforced (20-min limit exceeded).")
+            
+        except requests.exceptions.RequestException:
+            print("⚠️ TELEMETRY FAULT: Master Ground Floor ESP32 is completely offline or unreachable.")
+            logger.critical("Master Ground Floor ESP32 unreachable over the local Wi-Fi router network.")
+            
+        time.sleep(10) # Review master controller data registers every 10 seconds
+
 
 # --- MULTITHREADED VIDEO CAPTURE ENGINE ---
 class CameraStreamBuffer:
@@ -155,7 +244,7 @@ def cctv_multi_ai_worker():
         active_cameras[name] = CameraStreamBuffer(name, url).start()
         
     last_alert = 0
-    alert_cooldown = 20 # Seconds to wait before announcing an alert again
+    alert_cooldown = 20  # Seconds to wait before announcing an alert again
     
     print("🎯 All 12 camera matrices are online and processing in parallel.")
     
@@ -164,7 +253,7 @@ def cctv_multi_ai_worker():
         for name, cam in active_cameras.items():
             frame = cam.get_frame()
             if frame is None:
-                continue # Skip camera if it hasn't caught a frame yet
+                continue  # Skip camera if it hasn't caught a frame yet
                 
             # OPTIMIZATION: half=True compresses calculation footprint to 16-bit, reduces VRAM usage by 50% (i.e half)
             # device=0 ensures it executes on your RTX 2060 GPU
@@ -172,7 +261,7 @@ def cctv_multi_ai_worker():
             human_detected = False
             
             for r in results.boxes:
-                if int(r.cls) == 0 and r.conf > 0.5: # Class 0 = Human check
+                if int(r.cls) == 0 and r.conf > 0.5:  # Class 0 = Human check 
                     human_detected = True
                     break
                     
@@ -181,19 +270,24 @@ def cctv_multi_ai_worker():
                 if now - last_alert > alert_cooldown:
                     last_alert = now
                     print(f"🚨 INTRUDER SPOTTED AT: {name}!")
+                    winsound.Beep(800, 400)
+                    winsound.Beep(800, 400)
                     # Non-blocking voice execution via sub-thread so the AI loop doesn't pause while speaking
                     threading.Thread(target=speak, args=(f"Warning. Intruder spotted at the {name}.",), daemon=True).start()
                     
         # Small sleep step to prevent maxing out internal CPU bus pipelines
         time.sleep(0.01)
 
+
 if __name__ == "__main__":
     # Spin up multi-processing execution layers
     t_voice = threading.Thread(target=voice_recognition_worker, daemon=True)
     t_ai = threading.Thread(target=cctv_multi_ai_worker, daemon=True)
+    t_telemetry = threading.Thread(target=network_telemetry_worker, daemon=True)
     
     t_voice.start()
     t_ai.start()
+    t_telemetry.start()
     
     # Maintain root thread lifecycle
     while True:

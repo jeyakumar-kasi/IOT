@@ -34,8 +34,6 @@ const char* password = "MY_WIFI_PASSWORD"; // Wi-Fi Router Password
 // Static IP Address of the 2nd-Floor Rooftop ESP8266
 const String roofESP_IP = "http://192.168.1.50"; 
 
-// Main Pump (1.5hp) 
-const int MAIN_PUMP_MAX_RUN_MIN = 10 // Mins (Max. continuous run)
 
 // --- IRRIGATION PUMP SCHEDULE CONFIGURATION (24-Hour Format) ---
 const int startHour = 6;    // 6:00 AM (Scheduled ON)
@@ -92,15 +90,6 @@ WebServer server(80);
 unsigned long lastNetworkCheck = 0;
 const long checkInterval = 20000; // Pull data from the roof every 20 seconds
 int overheadTankDistance = 0;
-
-// Watchdog state tracking variables
-bool isRooftopOnline = true; 
-
-// --- ADVANCED SAFETY RUN-TIME VARIABLES ---
-unsigned long pump1StartTime = 0;
-bool isPump1Running = false;
-bool pump1LockoutActive = false;
-const unsigned long PUMP1_MAX_RUN_TIME_MS = MAIN_PUMP_MAX_RUN_MIN * 60000; // 'n' Minutes continuous run maximum threshold limit
 
 void setup() {
   Serial.begin(115200);
@@ -194,12 +183,6 @@ void loop() {
       softRtc.begin(realHardwareTime);       
       dynamicSyncedToday = true;             
       Serial.println("\n[SYSTEM] Clock Drift Sync Completed Successfully at Midnight.");
-      
-      // Auto-clear the 1.5HP maximum run-time safety block once per day at midnight
-      if (pump1LockoutActive) {
-        pump1LockoutActive = false;
-        Serial.println("[SYSTEM SAFE]: Daily reset clearing Pump #1 max safety runtime lockout.");
-      }
     }
   } else {
     if (dynamicSyncedToday) {
@@ -250,54 +233,36 @@ void loop() {
     Serial.println("🚨 CRITICAL FAULT: Ground Source Tank Empty! Forcing ALL Pumps OFF.");
     digitalWrite(PUMP_RELAY_PIN, HIGH); 
     digitalWrite(PUMP2_RELAY_PIN, HIGH); // Emergency shut off Pump #1
-    isPump1Running = false;
   } 
   else if (overheadTankDistance > 0 && overheadTankDistance < 30) {
     // Water is closer than 30cm to rooftop sensor = Overhead tank is full!
     Serial.println("✅ Overhead Tank Full. Turning ALL Pumps OFF.");
     digitalWrite(PUMP_RELAY_PIN, HIGH);
     digitalWrite(PUMP2_RELAY_PIN, HIGH); // Stop high-power refill pump
-    isPump1Running = false;
   }
   else {
     // --- PUMP #1 (1.5HP REFILL PUMP) SYSTEM LOGIC ---
-    // Only allow Pump #1 to turn on if roof is online and no safety runtime lockout is active
-    if (overheadTankDistance > 120 && groundSourceWater == LOW && isRooftopOnline && !pump1LockoutActive) {
-      
-      // Track the initialization timestamp of the high-power run
-      if (!isPump1Running) {
-        isPump1Running = true;
-        pump1StartTime = currentMillis;
-        Serial.println("⚡ Pump #1 Core Timer Initialized.");
-      }
-
-      // MONITOR MAXIMUM RUNTIME CUTOFF EXCEEDED: Prevent infinite runs
-      if (currentMillis - pump1StartTime >= PUMP1_MAX_RUN_TIME_MS) {
-        digitalWrite(PUMP2_RELAY_PIN, HIGH); // Force relay OFF instantly
-        isPump1Running = false;
-        pump1LockoutActive = true; 
-        Serial.println("\n🚨 HARWARE EXCEPTION: Pump #1 exceeded max continuous 20-min limit! Lockout activated.");
-      } else {
-        digitalWrite(PUMP2_RELAY_PIN, LOW); // Turn relay ON safely
-        digitalWrite(PUMP_RELAY_PIN, HIGH); // Force irrigation OFF to guarantee filling power
-      }
+    // If the overhead tank falls below the low threshold, prioritize filling it first
+    if (overheadTankDistance > 120 && groundSourceWater == LOW) {
+      Serial.println("💧 Overhead Tank Low. Activating 1.5HP Refill Pump (Pump #1).");
+      digitalWrite(PUMP2_RELAY_PIN, LOW); // Turn relay ON
+      digitalWrite(PUMP_RELAY_PIN, HIGH); // Force irrigation OFF to guarantee filling power
     }
     else {
-      // Turn off Pump #1 if distance returns within normal parameters or sensor goes down
-      if ((overheadTankDistance >= 30 && overheadTankDistance <= 120) || !isRooftopOnline || pump1LockoutActive) {
+      // Turn off Pump #1 if distance returns within normal parameters
+      if (overheadTankDistance >= 30 && overheadTankDistance <= 120) {
         digitalWrite(PUMP2_RELAY_PIN, HIGH); // Turn relay OFF
-        isPump1Running = false;
       }
-      
+
       // --- PUMP #2 (55W IRRIGATION PUMP) TIME LOGIC ---
       // The automated rule: Time window active, LDR conditions valid, and Pump #1 is NOT busy refilling
       bool shouldBeOn = timeScheduleActive && isDarkOut && (digitalRead(PUMP2_RELAY_PIN) == HIGH);
-      
+
       // Apply button toggle override state inversion (Override bypasses the LDR rule)
       if (manualOverride) {
-        shouldBeOn = !shouldBeOn;
+        shouldBeOn = !shouldBeOn; 
       }
-      
+
       // ACTIVE-LOW TRANSLATION CONTROL FOR PUMP #2
       if (shouldBeOn) {
         digitalWrite(runningPin, HIGH);
@@ -308,11 +273,11 @@ void loop() {
       }
     }
   }
-  
+
   // 6. NON-BLOCKING SERIAL PRINTER & CACHED BATTERY LOGIC
   if (millis() - lastSerialUpdate >= serialInterval) {
     lastSerialUpdate = millis();
-    
+
     // Print Boot Reference
     Serial.print("Booted: ["); Serial.print(bootTimestamp); Serial.print("] | ");
     
@@ -329,12 +294,8 @@ void loop() {
     
     // Print Automation Output Status
     Serial.print(" | Overhead Dist: "); Serial.print(overheadTankDistance); Serial.print("cm");
-    Serial.print(isRooftopOnline ? " (Online)" : " (OFFLINE ❌)");
-    
-    if (pump1LockoutActive) 
-      Serial.print(" [LOCKOUT]"); 
-    Serial.print(digitalRead(PUMP2_RELAY_PIN) == LOW ? " | PUMP1: ON" : " | PUMP1: OFF");
-    Serial.print(digitalRead(PUMP_RELAY_PIN) == LOW ? " | PUMP2: ON" : " | PUMP2: OFF");
+    Serial.print(digitalRead(PUMP2_RELAY_PIN) == LOW ? " | PUMP1 (1.5HP): ON" : " | PUMP1 (1.5HP): OFF");
+    Serial.print(digitalRead(PUMP_RELAY_PIN) == LOW ? " | PUMP2 (55W): ON" : " | PUMP2 (55W): OFF");
     Serial.print(manualOverride ? " (MANUAL)" : " (AUTO)  ");
     
     // Low-frequency Battery Monitoring
@@ -356,10 +317,9 @@ void loop() {
 void handleRoot() {
   String response = "Ground Floor Master Status:\n";
   response += "Overhead Tank Distance: " + String(overheadTankDistance) + " cm\n";
-  response += "Rooftop Link: " + String(isRooftopOnline ? "CONNECTED" : "DISCONNECTED ❌") + "\n";
+  response += "Ground Tank Status: " + String(digitalRead(P43_FLOAT_PIN) == LOW ? "OK" : "EMPTY") + "\n";
   response += "Pump 1 (1.5HP) Status: " + String(digitalRead(PUMP2_RELAY_PIN) == LOW ? "RUNNING" : "STOPPED") + "\n";
   response += "Pump 2 (55W) Status: " + String(digitalRead(PUMP_RELAY_PIN) == LOW ? "RUNNING" : "STOPPED") + "\n";
-  response += "Pump 1 Lockout Status: " + String(pump1LockoutActive ? "LOCKED" : "SAFE") + "\n";
   response += "Manual Override Mode: " + String(manualOverride ? "ACTIVE" : "DISABLED");
   
   server.send(200, "text/plain", response);
@@ -370,15 +330,13 @@ void fetchRooftopData() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     http.begin(roofESP_IP);
-    
     int httpCode = http.GET();
+    
     if (httpCode > 0) {
       String payload = http.getString();
-      isRooftopOnline = true; // Connection valid, arm operations
-      digitalWrite(errorPin, LOW);
-      
       // Look for the "Water Tank Distance:" text inside the roof response
       int index = payload.indexOf("Water Tank Distance:");
+      
       if (index != -1) {
         int start = index + String("Water Tank Distance:").length();
         int end = payload.indexOf("cm", start);
@@ -389,22 +347,9 @@ void fetchRooftopData() {
         Serial.printf("\nLive Wireless Data -> Roof Tank Distance: %d cm\n", overheadTankDistance);
       }
     } else {
-      // WATCHDOG INTERCEPT: The network signal dropped mid-execution!
-      isRooftopOnline = false;
-      overheadTankDistance = 0;
-      digitalWrite(errorPin, HIGH); // Illuminate error LED indicator
-      
-      // BROADCAST NETWORK FAILURE SIGNAL FOR THE PC DESKTOP MONITOR ALARM
-      Serial.println("🚨ROOFTOP_OFFLINE🚨");
-      
-      // IMMEDIATE FAIL-SAFE SHUTDOWN: Drop Pump #1 relay instantly to prevent overfilling or running dry
-      if (digitalRead(PUMP2_RELAY_PIN) == LOW) {
-        digitalWrite(PUMP2_RELAY_PIN, HIGH);
-        isPump1Running = false;
-        Serial.println("\n🚨 WATCHDOG FAULT: Rooftop Node lost! Emergency Shutdown Pump #1 (1.5HP) immediately.");
-        }
-      }
-      
-      http.end();
+      Serial.println("⚠️ Connection Error: Failed to contact Rooftop ESP8266.");
     }
+    
+    http.end();
   }
+}
