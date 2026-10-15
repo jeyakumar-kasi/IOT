@@ -1,6 +1,6 @@
 
 
-const int motorCtrlPin = 8;
+const int motorCtrlPin = 7;
 
 void setup() {
   Serial.begin(9600);
